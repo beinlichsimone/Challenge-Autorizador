@@ -1,120 +1,79 @@
 (ns challenge-autorizador.teste
-  (:gen-class)
-  (:require [cheshire.core :as cheshire]))
+  ;(:gen-class)
+  (:require [cheshire.core :as cheshire]
+            [challenge-autorizador.logic.validator :as validator]
+            [challenge-autorizador.db.atom.account :as db]))
 
-(def conta (atom {:account {}, :violations []}))            ;; Inicializando com um mapa vazio
-
-(def transacoes (atom []))
-
-(defn mapa-para-json [m]
-  (cheshire/generate-string m))
-
-(defn json-para-mapa [m]
-  (cheshire/parse-string m true))
-
-(defn assoc-violations [violations]
-  (swap! conta
-         (fn [account]
-           (if (empty? violations)
-             account
-             (update account :violations conj violations)))))
-
-(defn atualiza-conta [input]
-  (swap! conta update :account merge (get input :account))) ;; Atualiza corretamente o campo :account
-
-(defn cartao-ativo? []
-  (if (get-in @conta [:account :active-card])
+(defn validate-limit
+  [transaction]
+  (if (validator/has-limit? transaction (get @db/atom-account :account))
     true
-    (do (assoc-violations ["card-not-active"]) false)))     ;; Corrigido: passamos uma lista de violação
+    (do (db/assoc-violations "insufficient-limit") false)))
 
-(defn tem-limite? [valor]
-  (if (>= (get-in @conta [:account :available-limit]) valor)
+(defn validate-card []
+  (if (validator/active-card? (get @db/atom-account :account))
     true
-    (do (assoc-violations ["insufficient-limit"]) false)))
+    (do (db/assoc-violations "card-not-active") false)))
 
-(defn conta-criada? []
-  (if (contains? (:account @conta) :available-limit)
+(defn validate-account []
+  (if (validator/account-created? (get @db/atom-account :account))
     true
-    (do (assoc-violations ["account-not-initialized"]) false)))
+    (do (db/assoc-violations "account-not-initialized") false)))
 
-;; Função para converter uma string ISO 8601 em timestamp (milissegundos)
-(defn parse-time-to-timestamp [time-str]
-  (-> time-str
-      java.time.Instant/parse
-      .toEpochMilli))
+(defn validate-more-than-three-transactions []
+  (let [number-transactions-last-two-minutes (db/number-transactions-last-two-minutes)]
+    (if (validator/within-transaction-limit? number-transactions-last-two-minutes)
+      true
+      (do (db/assoc-violations "high-frequency-small-interval") false))))
 
-(defn numero-transacoes-ultimos-dois-minutos []
-  (let [now (System/currentTimeMillis)]                     ;; Obtém o timestamp atual
-    ;; Filtra transações que ocorreram nos últimos 2 minutos
-    (count (filter #(> now (- (parse-time-to-timestamp (get-in % [:transaction :time])) 120000)) @transacoes))))
-
-(defn mais-que-tres-transacoes? []
-  (if (< (numero-transacoes-ultimos-dois-minutos) 3)
+(defn validate-similar-transaction
+  [transaction]
+  (if (not (db/find-similar-transaction transaction))
     true
-    (do (assoc-violations ["high-frequency-small-interval" @transacoes]) false)))
+    (do (db/assoc-violations "doubled-transaction") false)))
 
-(defn localiza-transacao-similar? [transaction]
-  (let [amount (get-in transaction [:transaction :amount])
-        merchant (get-in transaction [:transaction :merchant])
-        now (System/currentTimeMillis)]                     ;; Obtém o timestamp atual
-    (some #(and (= (get-in % [:transaction :amount]) amount)
-                (= (get-in % [:transaction :merchant]) merchant)
-                (> now (- (parse-time-to-timestamp (get-in % [:transaction :time])) 120000))) ;; Verifica se a transação está dentro do intervalo de 2 minutos
-          @transacoes)))
-
-(defn transacao-similar? [transaction]
-  (if (not (localiza-transacao-similar? transaction))
-          true
-          (do (assoc-violations ["high-frequency-small-interval" @transacoes]) false)))
-
-(defn valida-transacao [transaction]
+(defn validate-transaction
+  [{:keys [transaction]}]
   (and
-    (conta-criada?)
-    (cartao-ativo?)
-    (tem-limite? (get-in transaction [:transaction :amount]))
-    (mais-que-tres-transacoes?)
-    (transacao-similar? transaction)))
+    (validate-account)
+    (validate-card)
+    (validate-limit transaction)
+    (validate-more-than-three-transactions)
+    (validate-similar-transaction transaction)))
 
-(defn atualiza-limite-conta [valor]
-  (swap! conta update-in [:account :available-limit] (fn [old-limit] (- old-limit valor))))
+(defn process-account
+  [account]
+  (if (validator/account-created? (get @db/atom-account :account))
+    (db/assoc-violations "account-already-initialized")
+    (db/update-account account)))
 
-(defn atualiza-transacoes [transaction]
-  (swap! transacoes conj transaction))
-
-(defn processa-conta [account]
-  (if (contains? (:account @conta) :available-limit)
+(defn process-transaction
+  [transaction]
+  (if (validate-transaction transaction)
     (do
-      (mapa-para-json (assoc account :violations ["account-already-initialized"])))
-    (do
-      (atualiza-conta account)
-      (mapa-para-json @conta))))
+      (db/update-account-limit (get-in transaction [:transaction :amount]))
+      (db/update-transactions transaction)
+      (str "Processed transaction: " @db/atom-account))
+    (str "Transaction not authorized: " @db/atom-account)))
 
-(defn processa-transacao [transaction]
-  (str "Processed transaction: " @conta)
-  (if (valida-transacao transaction)
-    (do
-      ;; Incrementa o valor de :amount na lista global
-      (atualiza-limite-conta (get-in transaction [:transaction :amount]))
-      (atualiza-transacoes transaction)
-      (str "Processed transaction: " @conta))
-    (str "Transaction not authorized: " @conta)))
+(defn process-operation [input-map]
+  (cond
+    (contains? input-map :account) (process-account input-map)
+    (contains? input-map :transaction) (process-transaction input-map)
+    :else "Invalid operation!"))
 
-(defn ler-operacao []
-  (println "Digite uma operação no formato json. Digite 'sair' para encerrar:")
-  (let [entrada (read-line)]                                ;; Lê a entrada do usuário
-    (if (= entrada "sair")
-      nil                                                   ;; Se o usuário digitar "sair", retorna nil para encerrar
-      (let [mapa-entrada (json-para-mapa entrada)]
-        (cond
-          (contains? mapa-entrada :account) (processa-conta mapa-entrada)
-          (contains? mapa-entrada :transaction) (processa-transacao mapa-entrada)
-          :else "Operação inválida!")))))
+(defn read-operation []
+  (println "Enter an operation in json format. Type 'exit' to exit:")
+  (let [input (read-line)]                                  ;; Lê a entrada do usuário
+    (when (not (= input "exit"))                            ;; Se o usuário digitar "exit", retorna nil para encerrar
+      (let [input-map (cheshire/parse-string input true)
+            output-map (process-operation input-map)]
+        (cheshire/generate-string output-map)))))
 
 (defn -main []
-  (loop []
-    (let [resultado (ler-operacao)]
-      (if resultado
-        (do
-          (println "Resultado:" resultado)
-          (recur))                                          ;; Repete o loop
-        (println "Programa encerrado.")))))                 ;; Quando o usuário digitar 'sair', encerra o programa
+  (let [result (read-operation)]
+    (if result
+      (do
+        (println "Result:" result)
+        (recur))                                            ;; Repete o loop
+      (println "Program closed."))))                        ;; Quando o usuário digitar 'sair', encerra o programa

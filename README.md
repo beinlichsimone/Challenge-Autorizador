@@ -1,22 +1,14 @@
 # challenge-autorizador
 
-A Clojure library designed to ... well, that part is up to you.
+A Clojure library designed to create a bank account and process credit card transactions..
 
 ## Usage
 
-FIXME
+run the program through the command: lein run
 
-## License
+## Example of accepted inputs
 
-Copyright © 2024 FIXME
-
-This program and the accompanying materials are made available under the
-terms of the Eclipse Public License 2.0 which is available at
-http://www.eclipse.org/legal/epl-2.0.
-
-This Source Code may also be made available under the following Secondary
-Licenses when the conditions for such availability set forth in the Eclipse
-Public License, v. 2.0 are satisfied: GNU General Public License as published by
-the Free Software Foundation, either version 2 of the License, or (at your
-option) any later version, with the GNU Classpath Exception which is available
-at https://www.gnu.org/software/classpath/license.html.
+{"account": {"active-card": true, "available-limit": 100}}
+{"transaction": {"merchant": "Burger King", "amount": 20, "time": "2019-02-13T10:00:00.000Z"}}
+{"transaction": {"merchant": "Habbib's", "amount": 90, "time": "2019-02-13T11:00:00.000Z"}}
+{"transaction": {"merchant": "McDonald's", "amount": 30, "time": "2019-02-13T12:00:00.000Z"}}

@@ -6,35 +6,30 @@
 
 (defn validate-limit
   [transaction]
-  (if (validator/has-limit? transaction (get @db/atom-account :account))
-    true
-    (do (db/assoc-violations "insufficient-limit") false)))
+  (when-not (validator/has-limit? transaction (get @db/atom-account :account))
+    "insufficient-limit"))
 
 (defn validate-card []
-  (if (validator/active-card? (get @db/atom-account :account))
-    true
-    (do (db/assoc-violations "card-not-active") false)))
+  (when-not (validator/active-card? (get @db/atom-account :account))
+    "card-not-active"))
 
 (defn validate-account []
-  (if (validator/account-created? (get @db/atom-account :account))
-    true
-    (do (db/assoc-violations "account-not-initialized") false)))
+  (when-not (validator/account-created? (get @db/atom-account :account))
+    "account-not-initialized"))
 
 (defn validate-more-than-three-transactions []
   (let [number-transactions-last-two-minutes (db/number-transactions-last-two-minutes)]
-    (if (validator/within-transaction-limit? number-transactions-last-two-minutes)
-      true
-      (do (db/assoc-violations "high-frequency-small-interval") false))))
+    (when-not (validator/within-transaction-limit? number-transactions-last-two-minutes)
+      "high-frequency-small-interval")))
 
 (defn validate-similar-transaction
   [transaction]
-  (if (not (db/find-similar-transaction transaction))
-    true
-    (do (db/assoc-violations "doubled-transaction") false)))
+  (when (db/find-similar-transaction transaction)
+    "doubled-transaction"))
 
 (defn validate-transaction
   [{:keys [transaction]}]
-  (and
+  (or
     (validate-account)
     (validate-card)
     (validate-limit transaction)
@@ -49,7 +44,8 @@
 
 (defn process-transaction
   [transaction]
-  (if (validate-transaction transaction)
+  (if-let [violation (validate-transaction transaction)]
+    (db/assoc-violations violation)
     (do
       (db/update-account-limit (get-in transaction [:transaction :amount]))
       (db/update-transactions transaction)))

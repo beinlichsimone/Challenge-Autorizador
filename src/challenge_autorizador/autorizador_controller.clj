@@ -1,5 +1,5 @@
-(ns challenge-autorizador.teste
-  ;(:gen-class)
+(ns challenge-autorizador.autorizador-controller
+  (:gen-class)
   (:require [cheshire.core :as cheshire]
             [challenge-autorizador.logic.validator :as validator]
             [challenge-autorizador.db.atom.account :as db]))
@@ -52,9 +52,8 @@
   (if (validate-transaction transaction)
     (do
       (db/update-account-limit (get-in transaction [:transaction :amount]))
-      (db/update-transactions transaction)
-      (str "Processed transaction: " @db/atom-account))
-    (str "Transaction not authorized: " @db/atom-account)))
+      (db/update-transactions transaction)))
+  @db/atom-account)
 
 (defn process-operation [input-map]
   (cond

@@ -6,5 +6,5 @@
   :dependencies [[org.clojure/clojure "1.11.1"]
                  [cheshire "5.10.1"]]
                  ;[clojure.data/json "0.2.7"]]
-  :main challenge-autorizador.teste
+  :main challenge-autorizador.autorizador-controller
   :repl-options {:init-ns challenge-autorizador.core})

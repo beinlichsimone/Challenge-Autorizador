@@ -5,11 +5,7 @@
 (def atom-transaction (atom []))
 
 (defn assoc-violations [violations]
-  (swap! atom-account
-         (fn [account]
-           (if (or (empty? violations) (some #(= % violations) (account :violations))) ;quebrar em mais responsabilidades
-             account
-             (update account :violations conj violations)))))
+  (swap! atom-account update :violations conj violations))
 
 (defn update-account
   [{:keys [account]}]

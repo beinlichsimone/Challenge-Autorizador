@@ -4,7 +4,9 @@ A Clojure library designed to create a bank account and process credit card tran
 
 ## Usage
 
-run the program through the command: lein run
+run the program through the command: 
+1) lein run
+2) lein run -m challenge-autorizador.autorizador-controller/-main < operation
 
 ## Example of accepted inputs
 

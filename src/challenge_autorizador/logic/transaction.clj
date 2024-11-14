@@ -38,7 +38,6 @@
   (if (logic.account/invalid-account? (:account contexto))
     ["account-not-initialized"]
     (cond-> []
-            (logic.account/invalid-account? (:account contexto)) (conj "account-not-initialized")
             (logic.account/inactive-card? (:account contexto)) (conj "card-not-active")
             (insufficient-limit? (:account contexto) transaction) (conj "insufficient-limit")
             (similar-transaction? (:transactions contexto) transaction) (conj "doubled-transaction")

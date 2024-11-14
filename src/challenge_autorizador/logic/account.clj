@@ -1,7 +1,7 @@
 (ns challenge-autorizador.logic.account)
 
 (defn inactive-card? [account]
-  (not (:available-limit account)))
+  (not (:active-card account)))
 
 (defn invalid-account? [account]
   (not (contains? account :available-limit)))
